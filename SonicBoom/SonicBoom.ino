@@ -1,7 +1,6 @@
 /*
-  SonicBoom.ino
-  Main file integrating motor control, servo control, state management,
-  and an artistic web-based UI for real-time feedback.
+  SonicBoom.ino - ESP32 Web Server
+  Features: Motor Control, Servo Handling, Real-Time UI Updates
 */
 
 #include <WiFi.h>
@@ -10,15 +9,14 @@
 #include "ServoControl.h"
 #include "StateManager.h"
 
-// WiFi credentials – update these with your network details
+// WiFi credentials – update with your actual SSID & Password
 const char* ssid = "YourSSID";
 const char* password = "YourPassword";
 
 // Create a web server on port 80
 WebServer server(80);
 
-// Define hardware pins:
-// Motor pins (H-bridge)
+// Define motor pins
 const uint8_t MOTOR1A = 16;
 const uint8_t MOTOR1B = 17;
 const uint8_t MOTOR2A = 18;
@@ -37,9 +35,9 @@ MotorControl motorControl(MOTOR1A, MOTOR1B, MOTOR2A, MOTOR2B,
 ServoControl servoControl(SERVO_PIN);
 StateManager stateManager;
 
-// Forward declarations for route handlers
+// Function declarations
 void handleRoot();
-void handleStart();
+void handleForward();
 void handleBackward();
 void handleLeft();
 void handleRight();
@@ -51,7 +49,7 @@ void handleStatus();
 void setup() {
   Serial.begin(115200);
 
-  // Initialize hardware modules
+  // Initialize motor and servo modules
   motorControl.init();
   servoControl.init();
 
@@ -62,112 +60,127 @@ void setup() {
     delay(500);
     Serial.print(".");
   }
-  Serial.println();
-  Serial.print("Connected! IP address: ");
-  Serial.println(WiFi.localIP());
+  Serial.println("\nConnected! IP address: " + WiFi.localIP().toString());
 
   // Define web server routes
   server.on("/", handleRoot);
-  server.on("/start", handleStart);         // Forward
-  server.on("/backward", handleBackward);     // Backward
-  server.on("/left", handleLeft);             // Turn left
-  server.on("/right", handleRight);           // Turn right
-  server.on("/stop", handleStop);             // Stop
-  server.on("/servoHold", handleServoHold);   // Hold cube
-  server.on("/servoRelease", handleServoRelease); // Release cube
+  server.on("/forward", handleForward);
+  server.on("/backward", handleBackward);
+  server.on("/left", handleLeft);
+  server.on("/right", handleRight);
+  server.on("/stop", handleStop);
+  server.on("/servoHold", handleServoHold);
+  server.on("/servoRelease", handleServoRelease);
   server.on("/status", handleStatus);
 
-  // Start the web server
+  // Start server
   server.begin();
-  Serial.println("Web server started");
+  Serial.println("Web server started!");
 }
 
 void loop() {
   server.handleClient();
 }
 
-// Main UI served with Tailwind CSS for an artistic, nature-inspired design
+// 🟢 Main UI Served to Clients
 void handleRoot() {
-  String html = "<!DOCTYPE html><html lang='en'><head><meta charset='UTF-8'>";
-  html += "<meta name='viewport' content='width=device-width, initial-scale=1.0'>";
-  html += "<title>SONIC BOOM Control Panel</title>";
-  // Include Tailwind CSS from CDN
-  html += "<script src='https://cdn.tailwindcss.com'></script>";
-  // Custom styling to evoke coffee, plants, and nature
-  html += "<style>body { background: linear-gradient(135deg, #4b3621, #a1866f); } </style>";
-  html += "</head><body class='text-white'>";
-  html += "<div class='container mx-auto py-10'>";
-  html += "<div class='bg-gray-800 bg-opacity-75 rounded-lg shadow-lg p-8'>";
-  html += "<h1 class='text-4xl font-bold mb-4'>SONIC BOOM Control Panel</h1>";
-  html += "<p class='text-lg mb-6'>Current State: <span id='state' class='font-mono'>" + stateManager.getStateString() + "</span></p>";
-  html += "<div class='grid grid-cols-2 gap-4'>";
-  html += "<button class='bg-green-500 hover:bg-green-600 text-white font-bold py-2 px-4 rounded' onclick=\"location.href='/start'\">Forward</button>";
-  html += "<button class='bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-4 rounded' onclick=\"location.href='/backward'\">Backward</button>";
-  html += "<button class='bg-yellow-500 hover:bg-yellow-600 text-white font-bold py-2 px-4 rounded' onclick=\"location.href='/left'\">Left</button>";
-  html += "<button class='bg-purple-500 hover:bg-purple-600 text-white font-bold py-2 px-4 rounded' onclick=\"location.href='/right'\">Right</button>";
-  html += "<button class='bg-red-500 hover:bg-red-600 text-white font-bold py-2 px-4 rounded' onclick=\"location.href='/stop'\">Stop</button>";
-  html += "<button class='bg-indigo-500 hover:bg-indigo-600 text-white font-bold py-2 px-4 rounded' onclick=\"location.href='/servoHold'\">Hold Cube</button>";
-  html += "<button class='bg-pink-500 hover:bg-pink-600 text-white font-bold py-2 px-4 rounded' onclick=\"location.href='/servoRelease'\">Release Cube</button>";
-  html += "</div></div></div>";
-  // jQuery for real-time state updates (polling every second)
-  html += "<script src='https://code.jquery.com/jquery-3.5.1.min.js'></script>";
-  html += "<script>setInterval(function() { $.get('/status', function(data) { $('#state').text(data); }); }, 1000);</script>";
-  html += "</body></html>";
+  String html = R"rawliteral(
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SONIC BOOM Control Panel</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.5.1/jquery.min.js"></script>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <style>
+    body {
+      font-family: "IBM Plex Mono", monospace;
+      background: #f5e6d3;
+      background-image: radial-gradient(#2c1810 1px, transparent 1px),
+        radial-gradient(#2c1810 1px, transparent 1px);
+      background-size: 20px 20px;
+      background-position: 0 0, 10px 10px;
+    }
+    .round-button {
+      border-radius: 50%;
+      aspect-ratio: 1;
+    }
+  </style>
+</head>
+<body class="min-h-screen p-4">
+  <div class="max-w-md mx-auto">
+    <div class="bg-[#dcc7b5] rounded-xl shadow-lg p-6 border-2 border-[#8b4513]">
+      
+      <!-- Decorative Plant -->
+      <div class="flex justify-center mb-4">
+        <svg viewBox="0 0 100 100" class="w-24 h-24 text-green-800">
+          <path d="M50,90 C50,90 80,60 50,30 C20,60 50,90 50,90" fill="#496b46"/>
+          <rect x="48" y="80" width="4" height="20" fill="#8b4513"/>
+        </svg>
+      </div>
+
+      <h1 class="text-3xl font-serif text-center text-[#2c1810] mb-6">SONIC BOOM</h1>
+      
+      <div class="bg-[#c4a484] rounded-lg p-4 mb-6">
+        <p class="text-lg text-center text-[#2c1810]">
+          Status: <span id="state" class="font-mono font-bold">IDLE</span>
+        </p>
+      </div>
+
+      <!-- Control Buttons -->
+      <div class="grid grid-cols-3 gap-4 mb-6">
+        <div></div>
+        <button onclick="location.href='/forward'" class="round-button bg-[#8b4513] hover:bg-[#6b3410] p-4">
+          <i data-lucide="arrow-up"></i>
+        </button>
+        <div></div>
+
+        <button onclick="location.href='/left'" class="round-button bg-[#8b4513] hover:bg-[#6b3410] p-4">
+          <i data-lucide="arrow-left"></i>
+        </button>
+        <button onclick="location.href='/stop'" class="round-button bg-[#a52a2a] hover:bg-[#8b0000] p-4">
+          <i data-lucide="square"></i>
+        </button>
+        <button onclick="location.href='/right'" class="round-button bg-[#8b4513] hover:bg-[#6b3410] p-4">
+          <i data-lucide="arrow-right"></i>
+        </button>
+
+        <div></div>
+        <button onclick="location.href='/backward'" class="round-button bg-[#8b4513] hover:bg-[#6b3410] p-4">
+          <i data-lucide="arrow-down"></i>
+        </button>
+        <div></div>
+      </div>
+
+      <div class="grid grid-cols-2 gap-4">
+        <button onclick="location.href='/servoHold'" class="bg-[#556b2f] hover:bg-[#3b4a1f] p-4">
+          <i data-lucide="lock"></i> Hold
+        </button>
+        <button onclick="location.href='/servoRelease'" class="bg-[#556b2f] hover:bg-[#3b4a1f] p-4">
+          <i data-lucide="unlock"></i> Release
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    lucide.createIcons();
+    setInterval(() => { $.get("/status", data => { $("#state").text(data); }); }, 1000);
+  </script>
+</body>
+</html>
+)rawliteral";
   server.send(200, "text/html", html);
 }
 
-// Route: Move forward
-void handleStart() {
-  stateManager.setState(MOVING);
-  motorControl.moveForward();
-  server.send(200, "text/plain", "Robot moving forward!");
-}
-
-// Route: Move backward
-void handleBackward() {
-  stateManager.setState(MOVING);
-  motorControl.moveBackward();
-  server.send(200, "text/plain", "Robot moving backward!");
-}
-
-// Route: Turn left
-void handleLeft() {
-  stateManager.setState(MOVING);
-  motorControl.turnLeft();
-  server.send(200, "text/plain", "Robot turning left!");
-}
-
-// Route: Turn right
-void handleRight() {
-  stateManager.setState(MOVING);
-  motorControl.turnRight();
-  server.send(200, "text/plain", "Robot turning right!");
-}
-
-// Route: Stop all movement
-void handleStop() {
-  stateManager.setState(IDLE);
-  motorControl.stopMotors();
-  server.send(200, "text/plain", "Robot stopped!");
-}
-
-// Route: Hold cube (servo action)
-void handleServoHold() {
-  stateManager.setState(SERVO_ACTION);
-  servoControl.holdCube();
-  stateManager.setState(IDLE);
-  server.send(200, "text/plain", "Cube held!");
-}
-
-// Route: Release cube (servo action)
-void handleServoRelease() {
-  stateManager.setState(SERVO_ACTION);
-  servoControl.releaseCube();
-  stateManager.setState(IDLE);
-  server.send(200, "text/plain", "Cube released!");
-}
-
-// Route: Return current state for real-time UI updates
-void handleStatus() {
-  server.send(200, "text/plain", stateManager.getStateString());
-}
+// Control Routes
+void handleForward() { stateManager.setState(MOVING); motorControl.moveForward(); server.send(200, "text/plain", "Moving Forward"); }
+void handleBackward() { stateManager.setState(MOVING); motorControl.moveBackward(); server.send(200, "text/plain", "Moving Backward"); }
+void handleLeft() { stateManager.setState(MOVING); motorControl.turnLeft(); server.send(200, "text/plain", "Turning Left"); }
+void handleRight() { stateManager.setState(MOVING); motorControl.turnRight(); server.send(200, "text/plain", "Turning Right"); }
+void handleStop() { stateManager.setState(IDLE); motorControl.stopMotors(); server.send(200, "text/plain", "Stopped"); }
+void handleServoHold() { stateManager.setState(SERVO_ACTION); servoControl.holdCube(); server.send(200, "text/plain", "Cube Held"); }
+void handleServoRelease() { stateManager.setState(SERVO_ACTION); servoControl.releaseCube(); server.send(200, "text/plain", "Cube Released"); }
+void handleStatus() { server.send(200, "text/plain", stateManager.getStateString()); }
